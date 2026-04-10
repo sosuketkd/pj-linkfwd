@@ -1,0 +1,11 @@
+# 隠しフォルダをすべて除外
+.*
+
+# ただし、npm実行に必要なファイルや設定は除外から外す（!を付ける）
+!package.json
+!package-lock.json
+!index.js
+!lib/
+
+# 不要なフォルダ
+node_modules/
