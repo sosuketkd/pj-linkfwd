@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Mail Viewer (Cloudflare + Firebase)</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getAuth, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // TODO: あなたの firebaseConfig を貼り付け
+    const firebaseConfig = {
+      apiKey: "...",
+      authDomain: "...",
+      projectId: "...",
+      storageBucket: "...",
+      messagingSenderId: "...",
+      appId: "..."
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app, "jp-linkfwd-db");
+
+    // --- 1. メールリンク送信処理 ---
+    window.sendLink = async () => {
+      const email = document.getElementById('email').value;
+      const actionCodeSettings = {
+        url: window.location.href, // 戻り先URL
+        handleCodeInApp: true,
+      };
+      try {
+        await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+        window.localStorage.setItem('emailForSignIn', email);
+        alert('ログインリンクを送信しました！');
+      } catch (e) { alert(e.message); }
+    };
+
+    // --- 2. ログインリンクの判定と処理 ---
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      let email = window.localStorage.getItem('emailForSignIn');
+      if (!email) {
+        email = window.prompt('確認のためメールアドレスを再入力してください');
+      }
+      signInWithEmailLink(auth, email, window.location.href)
+        .then(() => {
+          window.localStorage.removeItem('emailForSignIn');
+          window.location.hash = ""; // URLをきれいにする
+        })
+        .catch((e) => alert('ログイン失敗: ' + e.message));
+    }
+
+    // --- 3. ログイン状態の監視とデータ取得 ---
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('data-section').style.display = 'block';
+        document.getElementById('user-email').innerText = user.email + " としてログイン中";
+        
+        // 許可されたメールのみ取得
+        try {
+          const querySnapshot = await getDocs(collection(db, "received_emails"));
+          const list = document.getElementById('mail-list');
+          list.innerHTML = "";
+          querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            list.innerHTML += `<div style="border:1px solid #ccc; margin:10px; padding:10px;">
+              <h3>${data.subject}</h3>
+              <p>${data.body}</p>
+            </div>`;
+          });
+        } catch (e) {
+          document.getElementById('mail-list').innerText = "閲覧権限がありません，またはデータがありません．";
+        }
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>セキュアメール閲覧</h1>
+  <div id="auth-section">
+    <input type="email" id="email" placeholder="メールアドレス">
+    <button onclick="sendLink()">ログインリンク送信</button>
+  </div>
+  <div id="data-section" style="display:none;">
+    <p id="user-email"></p>
+    <div id="mail-list"></div>
+  </div>
+</body>
+</html>
